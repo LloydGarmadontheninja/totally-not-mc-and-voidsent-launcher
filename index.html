@@ -3,66 +3,293 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Private Portal</title>
+    <title>Geometry Dash</title>
     <style>
-        /* This makes the page look clean */
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
-            margin: 0; 
-            background-color: #f0f2f5; 
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        h1 { color: #1c1e21; }
-        button { 
-            padding: 15px 40px; 
-            font-size: 18px; 
+        
+        body {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+            border: 5px solid #333;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: #FF6B6B;
+            bottom: 100px;
+            left: 50px;
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .obstacle {
+            position: absolute;
+            background: #333;
+            bottom: 0;
+        }
+        
+        .spike {
+            position: absolute;
+            background: #FF3333;
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+        }
+        
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
             font-weight: bold;
-            background-color: #007AFF; 
-            color: white; 
-            border: none; 
-            border-radius: 12px; 
-            cursor: pointer; 
-            transition: transform 0.2s;
+            color: #333;
+            z-index: 10;
         }
-        button:active { transform: scale(0.95); }
+        
+        #gameOverScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+        }
+        
+        #gameOverScreen.show {
+            display: flex;
+        }
+        
+        #gameOverScreen h1 {
+            color: #FF6B6B;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        #gameOverScreen p {
+            color: white;
+            font-size: 32px;
+            margin-bottom: 30px;
+        }
+        
+        #restartBtn {
+            padding: 15px 40px;
+            font-size: 24px;
+            background: #FF6B6B;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        
+        #restartBtn:hover {
+            background: #FF5252;
+            transform: scale(1.05);
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #333;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
-
-    <h1>Web App Launcher</h1>
-    <button onclick="openGame()">Launch Site</button>
+    <div id="gameContainer">
+        <div id="score">Score: 0</div>
+        <div id="player"></div>
+        <div id="gameOverScreen">
+            <h1>GAME OVER!</h1>
+            <p id="finalScore">Score: 0</p>
+            <button id="restartBtn">RESTART</button>
+        </div>
+        <div id="instructions">SPACE or CLICK to Jump</div>
+    </div>
 
     <script>
-        function openGame() {
-            // 1. Attempt to open the blank window immediately
-            var newWin = window.open("about:blank", "_blank");
+        const gameContainer = document.getElementById('gameContainer');
+        const player = document.getElementById('player');
+        const scoreDisplay = document.getElementById('score');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const restartBtn = document.getElementById('restartBtn');
 
-            // 2. Check if Safari/Chrome blocked the popup
-            if (!newWin || newWin.closed || typeof newWin.closed == 'undefined') { 
-                alert("POPUP BLOCKED: Please click the 'Always Allow' icon in your browser address bar and try again.");
-                return;
+        let playerY = 100;
+        let playerX = 50;
+        let velocityY = 0;
+        let isJumping = false;
+        let gravity = 0.6;
+        let jumpPower = -15;
+        let score = 0;
+        let gameOver = false;
+        let scrollX = 0;
+        let spawnRate = 100;
+        let currentSpawnRate = spawnRate;
+
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            if ((e.code === 'Space' || e.key === ' ') && !gameOver) {
+                e.preventDefault();
+                jump();
+            }
+        });
+
+        gameContainer.addEventListener('click', () => {
+            if (!gameOver) {
+                jump();
+            }
+        });
+
+        function jump() {
+            if (!isJumping) {
+                velocityY = jumpPower;
+                isJumping = true;
+            }
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            // Apply gravity
+            velocityY += gravity;
+            playerY += velocityY;
+
+            // Ground collision
+            if (playerY >= 100) {
+                playerY = 100;
+                velocityY = 0;
+                isJumping = false;
             }
 
-            // 3. Define the content to put inside the about:blank page
-            var gameUrl = "https://modernclient.online";
-            
-            // 4. Inject the Game into the blank window
-            newWin.document.body.style.margin = "0";
-            newWin.document.body.style.height = "100vh";
-            
-            var iframe = newWin.document.createElement('iframe');
-            iframe.style.border = "none";
-            iframe.style.width = "100%";
-            iframe.style.height = "100%";
-            iframe.style.margin = "0";
-            iframe.src = gameUrl;
+            // Update player position
+            player.style.bottom = playerY + 'px';
+            player.style.left = playerX + 'px';
 
-            newWin.document.body.appendChild(iframe);
+            // Spawn obstacles
+            currentSpawnRate--;
+            if (currentSpawnRate <= 0) {
+                spawnObstacle();
+                currentSpawnRate = spawnRate;
+                spawnRate = Math.max(60, spawnRate - 2);
+            }
+
+            // Update obstacles
+            const obstacles = document.querySelectorAll('.obstacle, .spike');
+            obstacles.forEach(obstacle => {
+                let posX = parseFloat(obstacle.getAttribute('data-x'));
+                posX -= 8;
+                obstacle.setAttribute('data-x', posX);
+                obstacle.style.left = posX + 'px';
+
+                // Check collision
+                if (checkCollision(player, obstacle)) {
+                    endGame();
+                }
+
+                // Remove off-screen obstacles
+                if (posX < -50) {
+                    obstacle.remove();
+                    score += 10;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                }
+            });
         }
+
+        function spawnObstacle() {
+            const type = Math.random() > 0.3 ? 'obstacle' : 'spike';
+            const obstacle = document.createElement('div');
+            
+            if (type === 'obstacle') {
+                obstacle.className = 'obstacle';
+                const width = 40 + Math.random() * 30;
+                const height = 40 + Math.random() * 40;
+                obstacle.style.width = width + 'px';
+                obstacle.style.height = height + 'px';
+            } else {
+                obstacle.className = 'spike';
+                const size = 30 + Math.random() * 20;
+                obstacle.style.width = size + 'px';
+                obstacle.style.height = size + 'px';
+            }
+
+            obstacle.setAttribute('data-x', gameContainer.offsetWidth);
+            obstacle.style.left = gameContainer.offsetWidth + 'px';
+            gameContainer.appendChild(obstacle);
+        }
+
+        function checkCollision(player, obstacle) {
+            const playerRect = player.getBoundingClientRect();
+            const containerRect = gameContainer.getBoundingClientRect();
+            const obstacleRect = obstacle.getBoundingClientRect();
+
+            const playerLeft = playerRect.left - containerRect.left;
+            const playerRight = playerLeft + playerRect.width;
+            const playerTop = playerRect.top - containerRect.top;
+            const playerBottom = playerTop + playerRect.height;
+
+            const obstacleLeft = obstacleRect.left - containerRect.left;
+            const obstacleRight = obstacleLeft + obstacleRect.width;
+            const obstacleTop = obstacleRect.top - containerRect.top;
+            const obstacleBottom = obstacleTop + obstacleRect.height;
+
+            return !(playerRight < obstacleLeft || 
+                     playerLeft > obstacleRight || 
+                     playerBottom < obstacleTop || 
+                     playerTop > obstacleBottom);
+        }
+
+        function endGame() {
+            gameOver = true;
+            finalScoreDisplay.textContent = `Score: ${score}`;
+            gameOverScreen.classList.add('show');
+        }
+
+        function resetGame() {
+            playerY = 100;
+            velocityY = 0;
+            isJumping = false;
+            score = 0;
+            gameOver = false;
+            spawnRate = 100;
+            currentSpawnRate = spawnRate;
+            scoreDisplay.textContent = `Score: 0`;
+            gameOverScreen.classList.remove('show');
+            
+            const obstacles = document.querySelectorAll('.obstacle, .spike');
+            obstacles.forEach(obstacle => obstacle.remove());
+        }
+
+        restartBtn.addEventListener('click', resetGame);
+
+        // Game loop
+        setInterval(update, 1000 / 60);
     </script>
 </body>
 </html>
